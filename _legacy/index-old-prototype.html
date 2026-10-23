@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monitor de Ofertas - Reconhecimento de Mercadorias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+
+<!-- TensorFlow.js & MobileNet para Visão Computacional / Reconhecimento de Mercadorias -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1"></script>
+
+<style>
+:root{
+  --r:#ea1d2c; --rl:#ffeaec; --bg:#ffffff; --sf:#f5f5f5; --card:#ffffff; --ink:#3e3e3e; --mute:#717171; --line:#ebebeb;
+  --y:#fff1c7; --yt:#8a5a00;
+  --font:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--r:#ff4252;--rl:#3a1519;--bg:#141212;--sf:#211e1e;--card:#1c1919;--ink:#f3f1f1;--mute:#aaa3a3;--line:#302b2b;--y:#3d3210;--yt:#ffd36b}
+}
+:root[data-theme="dark"]{--r:#ff4252;--rl:#3a1519;--bg:#141212;--sf:#211e1e;--card:#1c1919;--ink:#f3f1f1;--mute:#aaa3a3;--line:#302b2b;--y:#3d3210;--yt:#ffd36b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.app{max-width:440px;margin:0 auto;height:100%;background:var(--bg);padding-bottom:120px;position:relative;overflow-x:hidden;overflow-y:scroll}
+.app::-webkit-scrollbar{width:10px}
+.app::-webkit-scrollbar-track{background:var(--sf)}
+.app::-webkit-scrollbar-thumb{background:var(--r);border-radius:10px;border:2px solid var(--sf)}
+@supports not selector(::-webkit-scrollbar){.app,.cats,.hz{scrollbar-color:var(--r) var(--sf)}}
+@media (min-width:600px){
+  body{background:#e4e4e4}
+  @media (prefers-color-scheme:dark){body{background:#070606}}
+  .app{margin:24px auto;height:calc(100% - 48px);border-radius:36px;box-shadow:0 30px 70px rgba(0,0,0,.25)}
+  .tab{bottom:24px!important;border-radius:0 0 36px 36px}
+}
+
+/* Cabeçalho fixo */
+.hd{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 8px}
+.loc{display:flex;align-items:center;justify-content:space-between}
+.loc small{display:block;color:var(--mute);font-size:12px;font-weight:700}
+.loc b{display:flex;align-items:center;gap:4px;color:var(--r);font-size:17px;font-weight:900;letter-spacing:-.01em}
+.loc b .ic{width:18px;height:18px}
+.logo{width:42px;height:42px;border-radius:50%;background:var(--rl);display:grid;place-items:center;font-size:21px}
+.sr{display:flex;align-items:center;gap:10px;background:var(--sf);border-radius:14px;padding:0 14px;margin-top:12px;color:var(--mute)}
+.sr input{flex:1;min-width:0;border:0;background:none;padding:13px 0;font-size:15.5px;font-weight:600;outline:none}
+.sr input::placeholder{color:var(--mute)}
+
+/* Badge da IA no Cabeçalho */
+.ai-pill{display:inline-flex;align-items:center;gap:6px;background:var(--sf);border:1.5px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;color:var(--mute);margin-top:5px;width:max-content}
+.ai-pill.active{color:#15803d;background:#f0fdf4;border-color:#bbf7d0}
+.ai-pill.erro{color:#b91c1c;background:#fef2f2;border-color:#fecaca}
+.ai-dot{width:7px;height:7px;border-radius:50%;background:#eab308;display:inline-block}
+.ai-pill.active .ai-dot{background:#22c55e}
+.ai-pill.loading .ai-dot{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.8)}}
+
+/* Categorias */
+.cats{display:flex;gap:14px;overflow-x:scroll;padding:8px 16px 10px}
+.cats::-webkit-scrollbar,.hz::-webkit-scrollbar{height:6px}
+.cats::-webkit-scrollbar-track,.hz::-webkit-scrollbar-track{background:var(--sf);border-radius:6px;margin:0 16px}
+.cats::-webkit-scrollbar-thumb,.hz::-webkit-scrollbar-thumb{background:var(--r);border-radius:6px}
+.cat{flex:none;width:66px;border:0;background:none;text-align:center;font-weight:800;font-size:12.5px;color:var(--ink);cursor:pointer;padding:0}
+.cat i{display:grid;place-items:center;width:60px;height:60px;border-radius:50%;background:var(--sf);font-size:29px;font-style:normal;margin:0 auto 6px;border:2px solid transparent}
+.cat.on{color:var(--r)}
+.cat.on i{border-color:var(--r);background:var(--rl)}
+
+/* Banner */
+.bn{margin:14px 16px 0;border-radius:22px;background:var(--r);color:#fff;padding:20px 18px;position:relative;overflow:hidden}
+.bn::before,.bn::after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.12)}
+.bn::before{width:170px;height:170px;right:-40px;top:-50px}
+.bn::after{width:100px;height:100px;right:60px;bottom:-50px}
+.bn .em{position:absolute;right:16px;top:50%;transform:translateY(-50%) rotate(8deg);font-size:78px;line-height:1}
+.bn h2{position:relative;margin:0 0 4px;font-size:23px;line-height:1.1;font-weight:900;letter-spacing:-.02em;max-width:8.5em}
+.bn p{position:relative;margin:0 0 14px;font-size:13.5px;font-weight:700;color:#ffd9dc}
+.bn button{position:relative;display:inline-flex;align-items:center;gap:8px;border:0;background:#fff;color:var(--r);font-weight:900;font-size:15px;border-radius:999px;padding:11px 18px;cursor:pointer;transition:transform .12s}
+.bn button:active{transform:scale(.97)}
+.bn button .ic{width:19px;height:19px}
+
+/* Seções */
+.sc{display:flex;justify-content:space-between;align-items:baseline;padding:0 16px;margin:26px 0 12px}
+.sc h3{margin:0;font-size:20px;font-weight:900;letter-spacing:-.02em}
+.sc span{color:var(--mute);font-size:13px;font-weight:700}
+.hz{display:flex;gap:12px;overflow-x:scroll;padding:0 16px 10px;scroll-snap-type:x mandatory}
+.hc{flex:none;width:146px;scroll-snap-align:start}
+.ph{position:relative;aspect-ratio:1;border-radius:18px;overflow:hidden;background:var(--sf)}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.rk{position:absolute;left:8px;top:8px;background:var(--bg);color:var(--ink);font-weight:900;font-size:12px;border-radius:999px;padding:2px 9px}
+.hc b{display:block;margin-top:8px;font-size:18px;font-weight:900;color:var(--r);letter-spacing:-.02em}
+.hc span,.hc small{display:block;font-size:13.5px;font-weight:700;line-height:1.25}
+.hc span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hc small{color:var(--mute);font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Lista */
+.lst{list-style:none;margin:0;padding:0}
+.row{display:flex;gap:14px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row img{width:78px;height:78px;border-radius:16px;object-fit:cover;flex:none;background:var(--sf)}
+.mid{flex:1;min-width:0}
+.mid h4{margin:0 0 3px;font-size:16px;font-weight:800;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mid p{margin:0;color:var(--mute);font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.chip{display:inline-block;background:var(--y);color:var(--yt);font-size:11px;font-weight:800;border-radius:8px;padding:2px 7px}
+.chip-ia{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:800;border-radius:8px;padding:2px 7px}
+.chip-ia.ok{background:#dcfce7;color:#166534}
+.chip-ia.enc{background:#e0f2fe;color:#075985}
+.chip-ia.ean{background:#f3e8ff;color:#6b21a8}
+.pr{text-align:right;flex:none}
+.pr b{display:block;font-size:20px;font-weight:900;letter-spacing:-.02em}
+.pr b small{font-size:12px;font-weight:800;margin-right:2px}
+.pr button{margin-top:6px;border:0;background:none;color:var(--mute);font-weight:700;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:4px 0}
+.row.new{animation:pop .4s cubic-bezier(.2,.9,.3,1.25)}
+@keyframes pop{from{transform:scale(.94);opacity:0}to{transform:none;opacity:1}}
+.vz{text-align:center;padding:34px 24px;color:var(--mute);font-weight:700}
+.vz i{display:block;font-size:46px;font-style:normal;margin-bottom:8px}
+
+/* Barra inferior */
+.tab{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:440px;background:var(--card);border-top:1px solid var(--line);display:flex;align-items:flex-end;padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));z-index:8}
+.tb{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;font-weight:800;color:var(--mute);padding:4px 0;cursor:pointer}
+.tb.on{color:var(--r)}
+.fab{flex:1;display:flex;justify-content:center}
+.fab button{width:64px;height:64px;margin-top:-32px;border-radius:50%;border:5px solid var(--card);background:var(--r);color:#fff;display:grid;place-items:center;box-shadow:0 8px 18px rgba(234,29,44,.45);cursor:pointer;transition:transform .12s}
+.fab button:active{transform:scale(.94)}
+.fab .ic{width:27px;height:27px}
+
+/* Camadas */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:20}
+.scrim.on{display:flex}
+.scrim.sw{align-items:flex-end;justify-content:center}
+.scrim.pw{align-items:center;justify-content:center;padding:20px;z-index:25}
+.sheet{width:100%;max-width:440px;max-height:92vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:10px 18px calc(20px + env(safe-area-inset-bottom,0px));animation:up .24s ease-out}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.grip{width:42px;height:5px;border-radius:9px;background:var(--line);margin:0 auto 16px}
+.sheet h3{margin:0 0 14px;font-size:21px;font-weight:900;letter-spacing:-.02em}
+.opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--sf);border:0;border-radius:16px;padding:14px;margin-bottom:10px;font-weight:800;font-size:16px;cursor:pointer}
+.opt i{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--rl);color:var(--r)}
+.opt small{display:block;font-weight:600;color:var(--mute);font-size:13px}
+.btn-t{width:100%;border:0;background:none;color:var(--mute);font-weight:800;padding:13px;cursor:pointer}
+.btn-r{width:100%;border:0;border-radius:14px;background:var(--r);color:#fff;font-weight:900;font-size:16px;padding:15px;cursor:pointer}
+.fp{position:relative;aspect-ratio:16/10;border-radius:18px;overflow:hidden;background:var(--sf);margin-bottom:12px}
+.fp img{width:100%;height:100%;object-fit:cover;display:block}
+.fp button{position:absolute;right:10px;bottom:10px;border:0;border-radius:999px;background:#fff;color:#3e3e3e;font-weight:800;font-size:13px;padding:8px 14px;cursor:pointer}
+label{display:block;font-size:13px;font-weight:800;color:var(--mute);margin:0 0 5px 2px}
+.in{width:100%;border:1.5px solid var(--line);background:var(--sf);border-radius:12px;padding:13px 14px;font-size:16px;font-weight:600}
+.in:focus{border-color:var(--r);outline:none}
+.fr{display:flex;gap:10px;margin:12px 0}.fr>div{flex:1;min-width:0}
+.cs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+.cs button{border:1.5px solid var(--line);background:var(--sf);border-radius:999px;padding:7px 13px;font-weight:800;font-size:13.5px;cursor:pointer}
+.cs button.on{border-color:var(--r);background:var(--rl);color:var(--r)}
+
+/* Feedback de Comparação de Preço em Tempo Real */
+.preco-feedback{margin-top:6px;font-size:12px;font-weight:800;border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:6px;transition:all .2s ease}
+.preco-feedback.barato{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+.preco-feedback.medio{background:#fef9c3;color:#854d0e;border:1px solid #fde047}
+.preco-feedback.caro{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
+
+/* Card de Análise da IA de Reconhecimento */
+.ai-card{border-radius:16px;padding:12px 14px;margin-bottom:14px;border:1.5px solid var(--line);background:var(--sf);transition:all .2s ease}
+.ai-card.loading{background:#fafafa;border-color:#e5e7eb;color:var(--mute)}
+.ai-card.valida{background:#f0fdf4;border-color:#86efac;color:#14532d}
+.ai-card.encarte{background:#f0f9ff;border-color:#7dd3fc;color:#0369a1}
+.ai-card.invalida{background:#fef2f2;border-color:#fca5a5;color:#991b1b;animation:pop .2s ease-out}
+.ai-card.indeciso{background:#fffbeb;border-color:#fde68a;color:#92400e}
+
+.ai-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.ai-head b{font-size:13.5px;font-weight:900;display:flex;align-items:center;gap:6px}
+.ai-conf{font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,.06)}
+.ai-desc{font-size:12.5px;margin:0 0 8px;line-height:1.35;opacity:.95}
+.ai-btn-sugestao{border:0;background:#16a34a;color:#fff;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:5px;width:100%;justify-content:center}
+.ai-btn-sugestao:active{transform:scale(.98)}
+.ai-actions{display:flex;gap:8px;align-items:center;margin-top:6px}
+.ai-btn-trocar{flex:1;border:0;background:#dc2626;color:#fff;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;cursor:pointer}
+.ai-btn-forcar{border:0;background:none;color:#991b1b;font-size:11.5px;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px}
+
+/* Seção de Código de Barras EAN */
+.ean-box{background:var(--sf);border-radius:12px;padding:10px 12px;margin:12px 0;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line)}
+.ean-info b{display:block;font-size:12px;color:var(--mute)}
+.ean-info span{font-family:monospace;font-size:14px;font-weight:800;color:var(--ink);letter-spacing:1px}
+.ean-btn{border:0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:800;cursor:pointer;color:var(--r)}
+
+/* Seção de Testes Rápidos Didáticos */
+.demo-box{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.demo-lbl{font-size:11.5px;font-weight:900;color:var(--mute);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;display:block}
+.demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.d-btn{border:1.5px solid var(--line);background:var(--sf);border-radius:14px;padding:10px 8px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:all .15s}
+.d-btn:active{transform:scale(.97)}
+.d-btn span{font-size:13px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:4px}
+.d-btn small{font-size:10.5px;font-weight:700;color:var(--mute)}
+.d-btn.ok:hover{border-color:#86efac;background:#f0fdf4}
+.d-btn.no:hover{border-color:#fca5a5;background:#fef2f2}
+
+.perm{width:100%;max-width:330px;background:var(--card);border-radius:28px;padding:26px 14px 10px;text-align:center;animation:pop .2s ease-out}
+.perm .pi{width:58px;height:58px;border-radius:50%;background:var(--rl);color:var(--r);display:grid;place-items:center;margin:0 auto 14px}
+.perm .pi .ic{width:28px;height:28px}
+.perm h3{margin:0 10px 18px;font-size:18px;line-height:1.3;font-weight:700}
+.perm h3 b{font-weight:900}
+.perm button{display:block;width:100%;border:0;background:var(--rl);border-radius:999px;padding:14px;margin-bottom:8px;font-weight:800;font-size:15px;color:var(--r);cursor:pointer}
+.perm button.no{background:none;color:var(--mute)}
+
+/* Câmera com Mira Ótica Laser */
+.cam{position:fixed;top:0;bottom:0;left:50%;width:100%;max-width:440px;transform:translateX(-50%);background:#000;z-index:30;display:none}
+.cam.on{display:block}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam .tbr{position:absolute;left:0;right:0;top:0;padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px;display:flex;justify-content:space-between;align-items:center;color:#fff;background:linear-gradient(#0009,#0000);font-weight:800;font-size:15px}
+.cam .x{border:0;background:#fff3;color:#fff;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;cursor:pointer}
+.cam .gd{position:absolute;inset:92px 26px 150px;border:2px solid rgba(255,255,255,.5);border-radius:22px;pointer-events:none;overflow:hidden}
+.cam .gd-laser{position:absolute;left:0;right:0;height:3px;background:#22c55e;box-shadow:0 0 16px #22c55e,0 0 4px #fff;top:15%;animation:scanLaser 2.2s ease-in-out infinite alternate}
+@keyframes scanLaser{0%{top:10%}100%{top:90%}}
+.cam .gd-hud{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.65);color:#fff;font-size:11px;font-weight:900;padding:4px 12px;border-radius:999px;letter-spacing:.04em;text-transform:uppercase}
+.cam .shot{position:absolute;left:50%;bottom:calc(30px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:80px;height:80px;border-radius:50%;border:5px solid #fff;background:none;padding:5px;cursor:pointer}
+.cam .shot::after{content:"";display:block;width:100%;height:100%;border-radius:50%;background:#fff}
+.cam .shot:active::after{background:var(--r)}
+
+.snack{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translate(-50%,16px);width:max-content;max-width:min(400px,calc(100vw - 32px));background:#2b2b2b;color:#fff;padding:12px 16px;border-radius:14px;font-size:14px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:40;display:flex;gap:10px;align-items:center;box-shadow:0 14px 30px rgba(0,0,0,.3)}
+.snack.on{opacity:1;transform:translate(-50%,0)}
+.snack i{width:10px;height:10px;border-radius:50%;flex:none;background:#3ddc84}
+.snack.aviso i{background:#ffc233}.snack.erro i{background:#ff6b6b}
+@media (prefers-reduced-motion:reduce){.sheet,.perm,.row.new{animation:none}.snack,.fab button,.bn button{transition:none}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.2"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+</svg>
+
+<div class="app" id="top">
+  <header class="hd">
+    <div class="loc">
+      <div>
+        <small>Monitorando preços em</small>
+        <b>Sorocaba, SP <svg class="ic"><use href="#i-chev"/></svg></b>
+        <div class="ai-pill loading" id="aiPill"><span class="ai-dot"></span><span id="aiPillTxt">Iniciando IA...</span></div>
+      </div>
+      <div class="logo" aria-hidden="true">🛒</div>
+    </div>
+    <label class="sr"><svg class="ic"><use href="#i-search"/></svg><input id="busca" type="search" placeholder="Buscar produto, mercado ou EAN" autocomplete="off" aria-label="Buscar ofertas"></label>
+  </header>
+
+  <nav class="cats" id="cats" aria-label="Categorias"></nav>
+
+  <section class="bn">
+    <span class="em" aria-hidden="true">📸</span>
+    <h2>Viu uma promoção?</h2>
+    <p id="resumo">Fotografe o encarte e compare</p>
+    <button id="abrir"><svg class="ic"><use href="#i-cam"/></svg>Tirar Foto / Galeria</button>
+  </section>
+
+  <div id="sec1">
+    <div class="sc"><h3>Menores preços</h3><span>Do mais barato</span></div>
+    <div class="hz" id="hz"></div>
+  </div>
+
+  <div class="sc" id="todas"><h3>Todas as ofertas</h3><span id="cnt"></span></div>
+  <ul class="lst" id="lista"></ul>
+</div>
+
+<nav class="tab" aria-label="Navegação">
+  <button class="tb on" id="tHome"><svg class="ic"><use href="#i-home"/></svg>Início</button>
+  <button class="tb" id="tBusca"><svg class="ic"><use href="#i-search"/></svg>Buscar</button>
+  <div class="fab"><button id="fab" aria-label="Fotografar encarte"><svg class="ic"><use href="#i-cam"/></svg></button></div>
+  <button class="tb" id="tOfertas"><svg class="ic"><use href="#i-list"/></svg>Ofertas</button>
+</nav>
+
+<!-- Origem (CameraSource.Prompt) -->
+<div class="scrim sw" id="scrim">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="st">
+    <div class="grip"></div>
+    <h3 id="st">Origem do encarte</h3>
+    <button class="opt" id="optCam"><i><svg class="ic"><use href="#i-cam"/></svg></i><span>Tirar Foto com Câmera (Scanner Laser)<small>Abre mira com escaneamento ótico</small></span></button>
+    <button class="opt" id="optGal"><i><svg class="ic"><use href="#i-img"/></svg></i><span>Escolher da Galeria<small>Usa uma foto do celular ou computador</small></span></button>
+
+    <!-- Testes Didáticos para Validação Rápida da IA -->
+    <div class="demo-box">
+      <span class="demo-lbl">🧪 Testar Reconhecimento de Mercadoria (IA):</span>
+      <div class="demo-grid">
+        <button type="button" class="d-btn ok" id="testMaca"><span>🍏 Maçã Verde</span><small>✅ Produto Real (Bip Sucesso)</small></button>
+        <button type="button" class="d-btn ok" id="testEncarte"><span>📰 Folheto Ofertas</span><small>✅ Encarte (Bip Sucesso)</small></button>
+        <button type="button" class="d-btn no" id="testPessoa"><span>👤 Pessoa / Selfie</span><small>⛔ NÃO Mercadoria (Erro)</small></button>
+        <button type="button" class="d-btn no" id="testPet"><span>🐶 Cachorro / Pet</span><small>⛔ NÃO Mercadoria (Erro)</small></button>
+      </div>
+    </div>
+
+    <button class="btn-t" id="optCancel" style="margin-top:10px">Cancelar</button>
+  </div>
+</div>
+
+<!-- Permissão (estilo Android) -->
+<div class="scrim pw" id="permScrim">
+  <div class="perm" role="alertdialog" aria-modal="true" aria-labelledby="pt">
+    <div class="pi"><svg class="ic"><use href="#i-cam"/></svg></div>
+    <h3 id="pt">Permitir que <b>Supermercado Promoções</b> tire fotos e grave vídeos?</h3>
+    <button id="permUso">Enquanto o app estiver em uso</button>
+    <button id="permUma">Somente desta vez</button>
+    <button id="permNao" class="no">Não permitir</button>
+  </div>
+</div>
+
+<!-- Nova oferta -->
+<div class="scrim sw" id="formScrim">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ft">
+    <div class="grip"></div>
+    <h3 id="ft">Nova oferta</h3>
+    <div class="fp"><img id="fprev" alt="Encarte capturado"><button id="trocar">Trocar foto</button></div>
+
+    <!-- Feedback e Reconhecimento da IA: Valida se é Mercadoria Real -->
+    <div id="aiCard" class="ai-card loading">
+      <div class="ai-head"><b>🔄 Reconhecendo imagem com IA...</b></div>
+      <p class="ai-desc">Verificando se a foto retrata uma mercadoria de supermercado ou encarte válido.</p>
+    </div>
+
+    <label for="produto">Nome da Mercadoria</label>
+    <input class="in" id="produto" placeholder="Ex.: Arroz tipo 1, 5 kg" autocomplete="off">
+
+    <!-- Caixa de Código de Barras Comercial (EAN-13) -->
+    <div class="ean-box">
+      <div class="ean-info">
+        <b>Código Comercial (EAN-13)</b>
+        <span id="eanTxt">7891000249012</span>
+      </div>
+      <button type="button" class="ean-btn" id="btnGerarEan">Gerar EAN</button>
+    </div>
+
+    <div class="fr">
+      <div>
+        <label for="preco">Preço (R$)</label>
+        <input class="in" id="preco" inputmode="decimal" placeholder="24,90" autocomplete="off">
+        <div id="precoAnalise" class="preco-feedback" style="display:none"></div>
+      </div>
+      <div>
+        <label for="mercado">Mercado Concorrente</label>
+        <input class="in" id="mercado" placeholder="Ex.: Central" autocomplete="off">
+      </div>
+    </div>
+
+    <label>Categoria</label>
+    <div class="cs" id="fcats"></div>
+    <button class="btn-r" id="salvar">Salvar oferta</button>
+    <button class="btn-t" id="descartar">Descartar foto</button>
+  </div>
+</div>
+
+<!-- Câmera ao vivo com Mira Ótica Laser -->
+<div class="cam" id="cam">
+  <video id="video" playsinline muted autoplay></video>
+  <div class="gd">
+    <div class="gd-laser"></div>
+    <div class="gd-hud">MIRA ÓTICA: ENQUADRE A MERCADORIA</div>
+  </div>
+  <div class="tbr"><span>Enquadre a mercadoria ou encarte</span><button class="x" id="fechaCam" aria-label="Fechar câmera"><svg class="ic"><use href="#i-x"/></svg></button></div>
+  <button class="shot" id="shutter" aria-label="Tirar foto"></button>
+</div>
+
+<div class="snack" id="snack" role="status" aria-live="polite"><i></i><span id="snackTxt"></span></div>
+<input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileGal" accept="image/*" hidden>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const CATS = [
+  { id: 'todos', nome: 'Todos', e: '🛍️' }, { id: 'mercearia', nome: 'Mercearia', e: '🍚' },
+  { id: 'bebidas', nome: 'Bebidas', e: '🥛' }, { id: 'padaria', nome: 'Padaria', e: '🍞' },
+  { id: 'hortifruti', nome: 'Hortifruti', e: '🥦' }, { id: 'limpeza', nome: 'Limpeza', e: '🧴' },
+];
+
+let foto = null, permissao = null, stream = null, novoId = null, tSnack = null;
+let cat = 'todos', busca = '', catForm = 'mercearia';
+let eanAtual = '7891000249012';
+
+// Síntese de Áudio Nativa (Web Audio API) para Bip de Supermercado
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// Bip agudo e limpo idêntico ao leitor de código de barras
+function somBeepSucesso() {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1400, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.11);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.11);
+  } catch (e) {}
+}
+
+// Bip grave de rejeição quando não é mercadoria
+function somBeepErro() {
+  try {
+    const ctx = getAudioCtx();
+    [0, 0.14].forEach((delay) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, ctx.currentTime + delay);
+      gain.gain.setValueAtTime(0.16, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.1);
+    });
+  } catch (e) {}
+}
+
+// Estado de Reconhecimento de Mercadoria por IA
+let aiModel = null;
+let aiCarregado = false;
+let estadoIa = {
+  ehMercadoria: null,
+  tipo: '',
+  titulo: '',
+  detalhe: '',
+  confianca: 0,
+  sugestaoNome: '',
+  sugestaoCat: '',
+  forcado: false
+};
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const brl = (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num = (s) => { const n = parseFloat(String(s).replace(/\./g, '').replace(',', '.')); return isNaN(n) ? null : n; };
+
+function gerarEanRandom() {
+  let e = '789';
+  for (let i = 0; i < 9; i++) e += Math.floor(Math.random() * 10);
+  let soma = 0;
+  for (let i = 0; i < 12; i++) soma += parseInt(e[i]) * (i % 2 === 0 ? 1 : 3);
+  const digito = (10 - (soma % 10)) % 10;
+  return e + digito;
+}
+
+function img(c1, c2, emoji) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="200" height="200" fill="url(#g)"/><circle cx="100" cy="190" r="90" fill="#fff" opacity=".28"/><text x="100" y="130" font-size="92" text-anchor="middle">${emoji}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+// Imagens vetoriais realistas para os testes didáticos
+function svgMaca() {
+  const s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><radialGradient id="gm" cx="35%" cy="35%" r="65%"><stop offset="0%" stop-color="#86efac"/><stop offset="70%" stop-color="#22c55e"/><stop offset="100%" stop-color="#15803d"/></radialGradient></defs><rect width="200" height="200" fill="#f0fdf4"/><path d="M98 32 C100 15, 116 12, 122 18" stroke="#78350f" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M102 26 C122 20, 138 32, 132 44 C116 44, 106 35, 102 26 Z" fill="#15803d"/><path d="M100 52 C122 40, 160 45, 165 90 C170 138, 132 178, 100 178 C68 178, 30 138, 35 90 C40 45, 78 40, 100 52 Z" fill="url(#gm)"/><ellipse cx="72" cy="80" rx="14" ry="24" transform="rotate(-25 72 80)" fill="#fff" opacity=".35"/><rect x="15" y="174" width="170" height="20" rx="6" fill="#16a34a"/><text x="100" y="188" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle" font-family="sans-serif">MERCADORIA (MAÇÃ VERDE)</text></svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(s);
+}
+
+function svgEncarte() {
+  const s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#ea1d2c"/><rect x="10" y="10" width="180" height="180" rx="10" fill="#ffffff"/><rect x="16" y="16" width="168" height="34" rx="6" fill="#ea1d2c"/><text x="100" y="39" font-size="14" font-weight="900" fill="#ffffff" text-anchor="middle" font-family="sans-serif">ENCARTE DE OFERTAS</text><rect x="22" y="58" width="72" height="80" rx="6" fill="#fef2f2" stroke="#ea1d2c" stroke-width="1.5"/><text x="58" y="88" font-size="24" text-anchor="middle">🍚</text><text x="58" y="108" font-size="10" font-weight="bold" fill="#1c1917" text-anchor="middle">Arroz 5kg</text><text x="58" y="126" font-size="12" font-weight="900" fill="#ea1d2c" text-anchor="middle">R$ 23,90</text><rect x="106" y="58" width="72" height="80" rx="6" fill="#fef2f2" stroke="#ea1d2c" stroke-width="1.5"/><text x="142" y="88" font-size="24" text-anchor="middle">🥛</text><text x="142" y="108" font-size="10" font-weight="bold" fill="#1c1917" text-anchor="middle">Leite 1L</text><text x="142" y="126" font-size="12" font-weight="900" fill="#ea1d2c" text-anchor="middle">R$ 4,49</text><rect x="15" y="174" width="170" height="20" rx="6" fill="#0284c7"/><text x="100" y="188" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle" font-family="sans-serif">ENCARTE PROMOCIONAL</text></svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(s);
+}
+
+function svgPessoa() {
+  const s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#fee2e2"/><circle cx="100" cy="85" r="44" fill="#fca5a5"/><path d="M56 85 C56 42, 144 42, 144 85 C144 60, 56 60, 56 85 Z" fill="#451a03"/><circle cx="86" cy="80" r="5" fill="#1c1917"/><circle cx="114" cy="80" r="5" fill="#1c1917"/><path d="M88 100 Q100 114 112 100" stroke="#1c1917" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M40 185 C40 140, 160 140, 160 185 Z" fill="#3b82f6"/><rect x="15" y="174" width="170" height="20" rx="6" fill="#dc2626"/><text x="100" y="188" font-size="10.5" font-weight="900" fill="#fff" text-anchor="middle" font-family="sans-serif">NÃO É MERCADORIA (PESSOA)</text></svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(s);
+}
+
+function svgPet() {
+  const s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#fef3c7"/><path d="M55 52 C40 85, 45 115, 60 110 Z" fill="#b45309"/><path d="M145 52 C160 85, 155 115, 140 110 Z" fill="#b45309"/><circle cx="100" cy="95" r="45" fill="#f59e0b"/><ellipse cx="100" cy="110" rx="22" ry="16" fill="#fef3c7"/><polygon points="100,105 93,113 107,113" fill="#1c1917"/><circle cx="84" cy="88" r="5" fill="#1c1917"/><circle cx="116" cy="88" r="5" fill="#1c1917"/><circle cx="86" cy="86" r="1.5" fill="#fff"/><circle cx="118" cy="86" r="1.5" fill="#fff"/><rect x="15" y="174" width="170" height="20" rx="6" fill="#dc2626"/><text x="100" y="188" font-size="10.5" font-weight="900" fill="#fff" text-anchor="middle" font-family="sans-serif">NÃO É MERCADORIA (PET)</text></svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(s);
+}
+
+let ofertas = [
+  { id: 1, cat: 'mercearia', foto: img('#ffe2b8', '#ffc27a', '🍚'), produto: 'Arroz tipo 1, 5 kg', preco: '24,90', mercado: 'Mercado Central', iaTag: 'Mercadoria confirmada', ean: '7891000100103' },
+  { id: 2, cat: 'bebidas', foto: img('#d4ecfb', '#9fd3f2', '🥛'), produto: 'Leite integral, caixa 1 L', preco: '4,79', mercado: 'Atacado Ponte', iaTag: 'Mercadoria confirmada', ean: '7891000200204' },
+  { id: 3, cat: 'bebidas', foto: img('#ead7c6', '#c9a589', '☕'), produto: 'Café torrado, 500 g', preco: '18,50', mercado: 'Super Bom Preço', iaTag: 'Mercadoria confirmada', ean: '7891000300305' },
+  { id: 4, cat: 'padaria', foto: img('#fdeab2', '#f6cf68', '🍞'), produto: 'Pão de forma tradicional', preco: '7,90', mercado: 'Padaria Real', iaTag: 'Mercadoria confirmada', ean: '7891000400406' },
+  { id: 5, cat: 'hortifruti', foto: img('#ffd5d0', '#ff9d94', '🍅'), produto: 'Tomate italiano, kg', preco: '6,99', mercado: 'Hortifruti Sol', iaTag: 'Mercadoria confirmada', ean: '7891000500507' },
+  { id: 6, cat: 'limpeza', foto: img('#d9e8ff', '#a9c8ff', '🧴'), produto: 'Detergente neutro 500 ml', preco: '2,49', mercado: 'Atacado Ponte', iaTag: 'Mercadoria confirmada', ean: '7891000600608' },
+];
+
+function setStatus(tipo, texto) {
+  const s = $('snack');
+  s.className = 'snack on ' + tipo;
+  $('snackTxt').textContent = texto;
+  clearTimeout(tSnack);
+  tSnack = setTimeout(() => s.classList.remove('on'), 4200);
+}
+const cancelado = () => { setStatus('aviso', 'Captura cancelada. Nenhuma foto foi adicionada.'); if (foto) formDlg(true); };
+
+function renderCats() {
+  $('cats').innerHTML = CATS.map((c) => `<button class="cat${c.id === cat ? ' on' : ''}" data-c="${c.id}"><i>${c.e}</i>${c.nome}</button>`).join('');
+  $('fcats').innerHTML = CATS.slice(1).map((c) => `<button type="button" class="${c.id === catForm ? 'on' : ''}" data-c="${c.id}">${c.e} ${c.nome}</button>`).join('');
+}
+
+function render() {
+  const q = busca.toLowerCase().trim();
+  const lista = ofertas.filter((o) => (cat === 'todos' || o.cat === cat) && (!q || (o.produto + ' ' + o.mercado + ' ' + (o.ean || '')).toLowerCase().includes(q)));
+  const ord = lista.filter((o) => num(o.preco) !== null).sort((a, b) => num(a.preco) - num(b.preco));
+  const menor = ord.length ? num(ord[0].preco) : null;
+
+  const tot = ofertas.length;
+  $('resumo').textContent = tot ? tot + (tot === 1 ? ' oferta salva' : ' ofertas salvas') + ' • compare e economize' : 'Fotografe o encarte e compare';
+  $('cnt').textContent = lista.length === 1 ? '1 item' : lista.length + ' itens';
+
+  $('sec1').style.display = ord.length > 1 ? 'block' : 'none';
+  $('hz').innerHTML = ord.slice(0, 6).map((o, i) => `<div class="hc"><div class="ph"><img src="${o.foto}" alt="${esc(o.produto)}"><span class="rk">${i + 1}º</span></div>
+    <b>R$ ${brl(num(o.preco))}</b><span>${esc(o.produto)}</span><small>${esc(o.mercado || 'Mercado não informado')}</small></div>`).join('');
+
+  if (!lista.length) {
+    $('lista').innerHTML = `<li class="vz"><i>${tot ? '🔍' : '🧾'}</i>${tot ? 'Nenhuma oferta encontrada.' : 'Nenhuma oferta ainda. Fotografe um encarte para começar.'}</li>`;
+    return;
+  }
+  $('lista').innerHTML = lista.map((o) => {
+    const n = num(o.preco);
+    const low = n !== null && n === menor && lista.length > 1;
+    const tagIa = o.iaTag ? `<span class="chip-ia ok">✓ ${esc(o.iaTag)}</span>` : '';
+    const tagEan = o.ean ? `<span class="chip-ia ean">EAN: ${esc(o.ean.slice(-6))}</span>` : '';
+    return `<li class="row${o.id === novoId ? ' new' : ''}">
+      <img src="${o.foto}" alt="Encarte de ${esc(o.produto)}">
+      <div class="mid">
+        <h4>${esc(o.produto)}</h4>
+        <p>🏪 ${esc(o.mercado || 'Mercado não informado')}</p>
+        <div class="chips">
+          ${low ? '<span class="chip">Menor preço</span>' : ''}
+          ${tagIa}
+          ${tagEan}
+        </div>
+      </div>
+      <div class="pr"><b>${n !== null ? '<small>R$</small>' + brl(n) : '—'}</b><button data-id="${o.id}" aria-label="Remover ${esc(o.produto)}">Remover</button></div></li>`;
+  }).join('');
+}
+
+const sheet = (on) => $('scrim').classList.toggle('on', on);
+const permDlg = (on) => $('permScrim').classList.toggle('on', on);
+const formDlg = (on) => $('formScrim').classList.toggle('on', on);
+
+function limparCaptura() {
+  foto = null;
+  formDlg(false);
+  ['produto', 'preco', 'mercado'].forEach((id) => ($(id).value = ''));
+  $('precoAnalise').style.display = 'none';
+  estadoIa = { ehMercadoria: null, tipo: '', titulo: '', detalhe: '', confianca: 0, sugestaoNome: '', sugestaoCat: '', forcado: false };
+}
+
+/* Base de conhecimento e classificação de mercadorias */
+const BASE_MERCADORIAS = {
+  hortifruti: [
+    { k: 'banana', n: 'Banana', c: 'hortifruti' },
+    { k: 'apple', n: 'Maçã', c: 'hortifruti' },
+    { k: 'granny smith', n: 'Maçã Verde', c: 'hortifruti' },
+    { k: 'orange', n: 'Laranja', c: 'hortifruti' },
+    { k: 'lemon', n: 'Limão', c: 'hortifruti' },
+    { k: 'strawberry', n: 'Morango', c: 'hortifruti' },
+    { k: 'pineapple', n: 'Abacaxi', c: 'hortifruti' },
+    { k: 'broccoli', n: 'Brócolis', c: 'hortifruti' },
+    { k: 'cauliflower', n: 'Couve-flor', c: 'hortifruti' },
+    { k: 'cucumber', n: 'Pepino', c: 'hortifruti' },
+    { k: 'bell pepper', n: 'Pimentão', c: 'hortifruti' },
+    { k: 'cabbage', n: 'Repolho', c: 'hortifruti' },
+    { k: 'mushroom', n: 'Cogumelo', c: 'hortifruti' },
+    { k: 'corn', n: 'Milho', c: 'hortifruti' },
+    { k: 'potato', n: 'Batata', c: 'hortifruti' },
+    { k: 'tomato', n: 'Tomate', c: 'hortifruti' }
+  ],
+  bebidas: [
+    { k: 'water bottle', n: 'Garrafa de Água Mineral', c: 'bebidas' },
+    { k: 'wine bottle', n: 'Garrafa de Vinho', c: 'bebidas' },
+    { k: 'beer bottle', n: 'Garrafa de Cerveja', c: 'bebidas' },
+    { k: 'beer glass', n: 'Cerveja', c: 'bebidas' },
+    { k: 'pop bottle', n: 'Refrigerante', c: 'bebidas' },
+    { k: 'soda', n: 'Refrigerante', c: 'bebidas' },
+    { k: 'coffee mug', n: 'Café', c: 'bebidas' },
+    { k: 'espresso', n: 'Café Espresso', c: 'bebidas' },
+    { k: 'cup', n: 'Copo / Bebida', c: 'bebidas' }
+  ],
+  padaria: [
+    { k: 'bagel', n: 'Pão / Bagel', c: 'padaria' },
+    { k: 'pretzel', n: 'Pretzel / Salgado', c: 'padaria' },
+    { k: 'french loaf', n: 'Pão Francês', c: 'padaria' },
+    { k: 'bakery', n: 'Produto de Padaria', c: 'padaria' },
+    { k: 'pizza', n: 'Pizza', c: 'padaria' },
+    { k: 'sandwich', n: 'Sanduíche', c: 'padaria' },
+    { k: 'cheeseburger', n: 'Hambúrguer', c: 'padaria' },
+    { k: 'hotdog', n: 'Cachorro-quente', c: 'padaria' }
+  ],
+  mercearia: [
+    { k: 'packet', n: 'Pacote de Mantimento / Produto', c: 'mercearia' },
+    { k: 'carton', n: 'Caixa de Leite / Cereal', c: 'mercearia' },
+    { k: 'can', n: 'Lata de Alimento / Conserva', c: 'mercearia' },
+    { k: 'tin', n: 'Lata de Conserva', c: 'mercearia' },
+    { k: 'ice cream', n: 'Pote de Sorvete', c: 'mercearia' },
+    { k: 'chocolate', n: 'Chocolate / Bombom', c: 'mercearia' },
+    { k: 'grocery store', n: 'Produto de Mercearia', c: 'mercearia' },
+    { k: 'shopping basket', n: 'Cesta de Produtos', c: 'mercearia' },
+    { k: 'jar', n: 'Pote de Alimento', c: 'mercearia' }
+  ],
+  limpeza: [
+    { k: 'soap dispenser', n: 'Sabonete Líquido', c: 'limpeza' },
+    { k: 'lotion', n: 'Loção / Creme', c: 'limpeza' },
+    { k: 'shampoo', n: 'Shampoo / Higiene', c: 'limpeza' },
+    { k: 'detergent', n: 'Detergente / Sabão', c: 'limpeza' },
+    { k: 'cleansing agent', n: 'Produto de Limpeza', c: 'limpeza' },
+    { k: 'sponge', n: 'Esponja de Limpeza', c: 'limpeza' },
+    { k: 'paper towel', n: 'Papel Toalha', c: 'limpeza' },
+    { k: 'toilet tissue', n: 'Papel Higiênico', c: 'limpeza' },
+    { k: 'diaper', n: 'Fralda Descartável', c: 'limpeza' },
+    { k: 'toothbrush', n: 'Escova de Dentes', c: 'limpeza' }
+  ],
+  encarte: [
+    { k: 'menu', n: 'Folheto de Preços / Cardápio', c: 'mercearia' },
+    { k: 'comic book', n: 'Tabloide / Encarte de Ofertas', c: 'mercearia' },
+    { k: 'book jacket', n: 'Capa / Encarte Promocional', c: 'mercearia' },
+    { k: 'poster', n: 'Cartaz Promocional', c: 'mercearia' },
+    { k: 'newspaper', n: 'Tabloide de Ofertas', c: 'mercearia' },
+    { k: 'paper', n: 'Folheto de Ofertas', c: 'mercearia' },
+    { k: 'envelope', n: 'Encarte Promocional', c: 'mercearia' },
+    { k: 'web site', n: 'Catálogo de Promoções', c: 'mercearia' },
+    { k: 'screen', n: 'Encarte na Tela', c: 'mercearia' }
+  ],
+  nao_mercadoria: [
+    { k: 'person', n: 'Pessoa / Rosto' },
+    { k: 'human', n: 'Pessoa / Rosto' },
+    { k: 'face', n: 'Rosto / Selfie' },
+    { k: 'groom', n: 'Pessoa' },
+    { k: 'bride', n: 'Pessoa' },
+    { k: 'wig', n: 'Cabelo / Peruca' },
+    { k: 'suit', n: 'Roupa / Traje' },
+    { k: 'swimming trunks', n: 'Roupa de Banho' },
+    { k: 'jean', n: 'Calça Jeans' },
+    { k: 'shoe', n: 'Calçado / Sapato' },
+    { k: 'sneaker', n: 'Tênis' },
+    { k: 'sunglasses', n: 'Óculos Escuros' },
+    { k: 'dog', n: 'Cachorro / Pet' },
+    { k: 'retriever', n: 'Cachorro' },
+    { k: 'terrier', n: 'Cachorro' },
+    { k: 'bulldog', n: 'Cachorro' },
+    { k: 'hound', n: 'Cachorro' },
+    { k: 'poodle', n: 'Cachorro' },
+    { k: 'shepherd', n: 'Cachorro' },
+    { k: 'cat', n: 'Gato / Pet' },
+    { k: 'tabby', n: 'Gato / Pet' },
+    { k: 'bird', n: 'Pássaro' },
+    { k: 'horse', n: 'Cavalo' },
+    { k: 'cow', n: 'Boi / Vaca' },
+    { k: 'elephant', n: 'Elefante' },
+    { k: 'car', n: 'Carro / Veículo' },
+    { k: 'automobile', n: 'Automóvel' },
+    { k: 'truck', n: 'Caminhão' },
+    { k: 'bus', n: 'Ônibus' },
+    { k: 'motorcycle', n: 'Moto' },
+    { k: 'bicycle', n: 'Bicicleta' },
+    { k: 'airplane', n: 'Avião' },
+    { k: 'couch', n: 'Sofá / Mobília' },
+    { k: 'sofa', n: 'Sofá' },
+    { k: 'bed', n: 'Cama' },
+    { k: 'wardrobe', n: 'Guarda-roupa' },
+    { k: 'toilet seat', n: 'Vaso Sanitário' },
+    { k: 'bathtub', n: 'Banheira' }
+  ]
+};
+
+/* Avalia predições da IA para determinar se É ou NÃO É mercadoria */
+function avaliarPredicoes(preds) {
+  if (!preds || !preds.length) {
+    return {
+      ehMercadoria: true,
+      tipo: 'indeciso',
+      titulo: 'Imagem não categorizada',
+      detalhe: 'A IA não identificou com precisão. Verifique se retrata um produto válido.',
+      confianca: 0
+    };
+  }
+
+  const top = preds[0];
+  const tStr = top.className.toLowerCase();
+  const perc = Math.round(top.probability * 100);
+
+  // 1. Checa se NÃO é mercadoria
+  for (const nm of BASE_MERCADORIAS.nao_mercadoria) {
+    if (tStr.includes(nm.k)) {
+      somBeepErro(); // Alerta sonoro de erro
+      return {
+        ehMercadoria: false,
+        tipo: 'invalido',
+        titulo: 'Não parece ser uma mercadoria!',
+        detalhe: `A imagem foi reconhecida como <b>${nm.n}</b> (${perc}% de certeza). O monitor aceita apenas produtos ou encartes de supermercado.`,
+        confianca: perc
+      };
+    }
+  }
+
+  // 2. Checa se é Encarte / Folheto Promocional
+  for (const enc of BASE_MERCADORIAS.encarte) {
+    if (tStr.includes(enc.k)) {
+      somBeepSucesso(); // Bip sonoro de sucesso
+      return {
+        ehMercadoria: true,
+        tipo: 'encarte',
+        titulo: 'Encarte Promocional Reconhecido',
+        detalhe: `Identificado folheto de ofertas (${perc}%). Digite o nome e preço do item anunciado.`,
+        sugestaoCat: enc.c,
+        confianca: perc
+      };
+    }
+  }
+
+  // 3. Checa produtos por categoria
+  for (const catKey of ['hortifruti', 'bebidas', 'padaria', 'mercearia', 'limpeza']) {
+    for (const prod of BASE_MERCADORIAS[catKey]) {
+      if (tStr.includes(prod.k)) {
+        somBeepSucesso(); // Bip sonoro de sucesso
+        return {
+          ehMercadoria: true,
+          tipo: 'produto',
+          titulo: 'Mercadoria Reconhecida pela IA',
+          detalhe: `Produto detectado: <b>${prod.n}</b> (${perc}% de certeza).`,
+          sugestaoNome: prod.n,
+          sugestaoCat: prod.c,
+          confianca: perc
+        };
+      }
+    }
+  }
+
+  // 4. Caso padrão / objeto detectado
+  somBeepSucesso();
+  return {
+    ehMercadoria: true,
+    tipo: 'indeciso',
+    titulo: 'Objeto Detectado na Foto',
+    detalhe: `Detectado: <i>${top.className.split(',')[0]}</i> (${perc}%). Verifique os dados antes de salvar.`,
+    confianca: perc
+  };
+}
+
+/* Analisador comparativo de preço em tempo real */
+function atualizarComparativoPreco() {
+  const pVal = num($('preco').value);
+  const fb = $('precoAnalise');
+  if (pVal === null || pVal <= 0) {
+    fb.style.display = 'none';
+    return;
+  }
+
+  const precosExistentes = ofertas
+    .filter((o) => (catForm === 'todos' || o.cat === catForm) && num(o.preco) !== null)
+    .map((o) => num(o.preco));
+
+  if (!precosExistentes.length) {
+    fb.className = 'preco-feedback medio';
+    fb.innerHTML = '⚖️ Primeiro item cadastrado nesta categoria.';
+    fb.style.display = 'flex';
+    return;
+  }
+
+  const min = Math.min(...precosExistentes);
+  const media = precosExistentes.reduce((a, b) => a + b, 0) / precosExistentes.length;
+
+  if (pVal < min) {
+    fb.className = 'preco-feedback barato';
+    fb.innerHTML = `🔥 Menor preço da cidade! Economia de R$ ${brl(min - pVal)} em relação ao concorrente.`;
+  } else if (pVal <= media) {
+    fb.className = 'preco-feedback medio';
+    fb.innerHTML = `👍 Bom preço! Próximo ou abaixo da média de R$ ${brl(media)}.`;
+  } else {
+    fb.className = 'preco-feedback caro';
+    fb.innerHTML = `⚠️ Preço alto: R$ ${brl(pVal - media)} acima da média de R$ ${brl(media)}.`;
+  }
+  fb.style.display = 'flex';
+}
+
+/* Renderiza o card da IA na tela */
+function renderizarCardIa() {
+  const card = $('aiCard');
+  if (!card) return;
+
+  if (estadoIa.analisando) {
+    card.className = 'ai-card loading';
+    card.innerHTML = `<div class="ai-head"><b>🔄 Reconhecendo imagem com IA...</b></div>
+      <p class="ai-desc">Verificando se a foto retrata uma mercadoria de supermercado ou encarte válido.</p>`;
+    return;
+  }
+
+  if (estadoIa.ehMercadoria === false && !estadoIa.forcado) {
+    card.className = 'ai-card invalida';
+    card.innerHTML = `
+      <div class="ai-head">
+        <b>⛔ ${estadoIa.titulo}</b>
+        ${estadoIa.confianca ? `<span class="ai-conf">${estadoIa.confianca}%</span>` : ''}
+      </div>
+      <p class="ai-desc">${estadoIa.detalhe}</p>
+      <div class="ai-actions">
+        <button type="button" class="ai-btn-trocar" id="aiBtnTrocar">📸 Trocar Foto</button>
+        <button type="button" class="ai-btn-forcar" id="aiBtnForcar">Confirmar como produto mesmo assim</button>
+      </div>`;
+
+    $('aiBtnTrocar').onclick = () => { formDlg(false); sheet(true); };
+    $('aiBtnForcar').onclick = () => {
+      estadoIa.forcado = true;
+      somBeepSucesso();
+      setStatus('aviso', 'Foto liberada manualmente pelo usuário.');
+      renderizarCardIa();
+    };
+    return;
+  }
+
+  if (estadoIa.tipo === 'encarte') {
+    card.className = 'ai-card encarte';
+    card.innerHTML = `
+      <div class="ai-head">
+        <b>📰 ${estadoIa.titulo}</b>
+        ${estadoIa.confianca ? `<span class="ai-conf">${estadoIa.confianca}%</span>` : ''}
+      </div>
+      <p class="ai-desc">${estadoIa.detalhe}</p>`;
+    return;
+  }
+
+  if (estadoIa.tipo === 'produto') {
+    card.className = 'ai-card valida';
+    card.innerHTML = `
+      <div class="ai-head">
+        <b>✅ ${estadoIa.titulo}</b>
+        ${estadoIa.confianca ? `<span class="ai-conf">${estadoIa.confianca}%</span>` : ''}
+      </div>
+      <p class="ai-desc">${estadoIa.detalhe}</p>
+      ${estadoIa.sugestaoNome ? `<button type="button" class="ai-btn-sugestao" id="aiUsarSugestao">✨ Usar sugestão da IA: "${estadoIa.sugestaoNome}"</button>` : ''}`;
+
+    if ($('aiUsarSugestao')) {
+      $('aiUsarSugestao').onclick = () => {
+        if (estadoIa.sugestaoNome) $('produto').value = estadoIa.sugestaoNome;
+        if (estadoIa.sugestaoCat) {
+          catForm = estadoIa.sugestaoCat;
+          renderCats();
+        }
+        somBeepSucesso();
+        setStatus('ok', 'Dados da mercadoria preenchidos pela IA!');
+      };
+    }
+    return;
+  }
+
+  // Indeciso ou liberado manualmente
+  card.className = 'ai-card indeciso';
+  card.innerHTML = `
+    <div class="ai-head">
+      <b>${estadoIa.forcado ? '⚠️ Liberado Manualmente' : '🔍 ' + estadoIa.titulo}</b>
+      ${estadoIa.confianca ? `<span class="ai-conf">${estadoIa.confianca}%</span>` : ''}
+    </div>
+    <p class="ai-desc">${estadoIa.forcado ? 'Você optou por salvar esta imagem como produto especial.' : estadoIa.detalhe}</p>`;
+}
+
+/* Mostra foto e dispara classificação por IA */
+async function mostrarFoto(url, mockPreds = null) {
+  foto = url;
+  $('fprev').src = url;
+  eanAtual = gerarEanRandom();
+  $('eanTxt').textContent = eanAtual;
+  formDlg(true);
+
+  estadoIa = { analisando: true, ehMercadoria: null, tipo: '', titulo: '', detalhe: '', confianca: 0, sugestaoNome: '', sugestaoCat: '', forcado: false };
+  renderizarCardIa();
+
+  // Se passou predições de teste (botões rápidos)
+  if (mockPreds) {
+    setTimeout(() => {
+      estadoIa = { analisando: false, ...avaliarPredicoes(mockPreds), forcado: false };
+      renderizarCardIa();
+    }, 450);
+    return;
+  }
+
+  // Caso seja foto real da câmera ou arquivo
+  try {
+    if (aiModel) {
+      if (!$('fprev').complete) {
+        await new Promise((resolve) => { $('fprev').onload = resolve; });
+      }
+      const preds = await aiModel.classify($('fprev'));
+      estadoIa = { analisando: false, ...avaliarPredicoes(preds), forcado: false };
+    } else {
+      setTimeout(() => {
+        somBeepSucesso();
+        estadoIa = {
+          analisando: false,
+          ehMercadoria: true,
+          tipo: 'indeciso',
+          titulo: 'Análise Heurística',
+          detalhe: 'Imagem recebida. Confirme o nome da mercadoria no formulário.',
+          confianca: 70,
+          forcado: false
+        };
+        renderizarCardIa();
+      }, 500);
+      return;
+    }
+  } catch (err) {
+    console.warn('Erro ao classificar com MobileNet:', err);
+    somBeepSucesso();
+    estadoIa = {
+      analisando: false,
+      ehMercadoria: true,
+      tipo: 'indeciso',
+      titulo: 'Verificação Padrão',
+      detalhe: 'Foto carregada. Preencha os dados do produto.',
+      confianca: 0,
+      forcado: false
+    };
+  }
+
+  renderizarCardIa();
+}
+
+/* Inicializa MobileNet em segundo plano */
+async function iniciarIa() {
+  const pill = $('aiPill');
+  const txt = $('aiPillTxt');
+  try {
+    if (typeof mobilenet === 'undefined') {
+      txt.textContent = 'IA Offline';
+      pill.className = 'ai-pill erro';
+      return;
+    }
+    aiModel = await mobilenet.load({ version: 2, alpha: 0.5 });
+    aiCarregado = true;
+    txt.textContent = 'IA Ativa (Reconhece)';
+    pill.className = 'ai-pill active';
+  } catch (e) {
+    console.warn('Não foi possível carregar o modelo MobileNet:', e);
+    txt.textContent = 'IA Heurística';
+    pill.className = 'ai-pill';
+  }
+}
+
+/* Navegação */
+$('cats').onclick = (e) => { const b = e.target.closest('.cat'); if (!b) return; cat = b.dataset.c; renderCats(); render(); };
+$('fcats').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; catForm = b.dataset.c; renderCats(); atualizarComparativoPreco(); };
+$('busca').oninput = (e) => { busca = e.target.value; render(); };
+$('preco').oninput = () => atualizarComparativoPreco();
+$('btnGerarEan').onclick = () => {
+  eanAtual = gerarEanRandom();
+  $('eanTxt').textContent = eanAtual;
+  somBeepSucesso();
+  setStatus('ok', 'Novo código de barras EAN-13 gerado!');
+};
+
+const aba = (id) => document.querySelectorAll('.tb').forEach((b) => b.classList.toggle('on', b.id === id));
+$('tHome').onclick = () => { aba('tHome'); cat = 'todos'; busca = ''; $('busca').value = ''; renderCats(); render(); $('top').scrollTo({ top: 0, behavior: 'smooth' }); };
+$('tBusca').onclick = () => { aba('tBusca'); $('top').scrollTo({ top: 0, behavior: 'smooth' }); $('busca').focus(); };
+$('tOfertas').onclick = () => { aba('tOfertas'); $('todas').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+
+/* Fluxo de captura */
+$('abrir').onclick = $('fab').onclick = () => sheet(true);
+$('optCancel').onclick = () => { sheet(false); cancelado(); };
+$('scrim').onclick = (e) => { if (e.target === $('scrim')) $('optCancel').click(); };
+$('optGal').onclick = () => { sheet(false); $('fileGal').click(); };
+$('optCam').onclick = () => { sheet(false); if (permissao === 'granted') abrirCamera(); else permDlg(true); };
+$('trocar').onclick = () => { formDlg(false); sheet(true); };
+
+/* Botões de testes didáticos rápidos de reconhecimento */
+$('testMaca').onclick = () => {
+  sheet(false);
+  mostrarFoto(svgMaca(), [{ className: 'Granny Smith, apple', probability: 0.94 }]);
+  setStatus('ok', 'Simulação: Foto de Produto Real (Maçã Verde)');
+};
+
+$('testEncarte').onclick = () => {
+  sheet(false);
+  mostrarFoto(svgEncarte(), [{ className: 'comic book, menu, book jacket, flyer', probability: 0.89 }]);
+  setStatus('ok', 'Simulação: Foto de Encarte Promocional');
+};
+
+$('testPessoa').onclick = () => {
+  sheet(false);
+  mostrarFoto(svgPessoa(), [{ className: 'person, human, face, groom', probability: 0.93 }]);
+  setStatus('aviso', 'Simulação: NÃO é mercadoria (Pessoa / Selfie)');
+};
+
+$('testPet').onclick = () => {
+  sheet(false);
+  mostrarFoto(svgPet(), [{ className: 'golden retriever, dog, pet', probability: 0.95 }]);
+  setStatus('aviso', 'Simulação: NÃO é mercadoria (Animal / Pet)');
+};
+
+$('permUso').onclick = () => { permDlg(false); permissao = 'granted'; abrirCamera(); };
+$('permUma').onclick = () => { permDlg(false); abrirCamera(); };
+$('permNao').onclick = () => { permDlg(false); setStatus('erro', 'Permissão negada. Libere a câmera nas configurações do aparelho.'); if (foto) formDlg(true); };
+
+async function abrirCamera() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('indisponivel');
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    $('video').srcObject = stream;
+    $('cam').classList.add('on');
+    $('video').play().catch(() => {});
+  } catch (err) {
+    console.warn('Câmera indisponível:', err);
+    const negou = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    setStatus(negou ? 'erro' : 'aviso', negou
+      ? 'O navegador bloqueou a câmera. Escolha uma foto da galeria ou use os testes rápidos.'
+      : 'Câmera ao vivo indisponível aqui. Escolha uma foto da galeria ou use os testes rápidos.');
+    try { $('fileCam').click(); } catch (e) {}
+  }
+}
+
+function pararCamera() {
+  if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+  $('cam').classList.remove('on');
+}
+$('fechaCam').onclick = () => { pararCamera(); cancelado(); };
+$('shutter').onclick = () => {
+  const v = $('video'), c = document.createElement('canvas');
+  c.width = v.videoWidth || 1280; c.height = v.videoHeight || 960;
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  c.toBlob((b) => { pararCamera(); if (b) mostrarFoto(URL.createObjectURL(b)); }, 'image/jpeg', 0.9);
+};
+
+['fileCam', 'fileGal'].forEach((id) => {
+  const el = $(id);
+  el.onchange = () => { const f = el.files && el.files[0]; if (f) mostrarFoto(URL.createObjectURL(f)); else cancelado(); el.value = ''; };
+  el.addEventListener('cancel', cancelado);
+});
+
+$('descartar').onclick = () => { limparCaptura(); setStatus('aviso', 'Foto descartada.'); };
+
+/* Salvar oferta com validação de mercadoria */
+$('salvar').onclick = () => {
+  const produto = $('produto').value.trim();
+
+  // 1. Valida se há foto
+  if (!foto) {
+    setStatus('erro', 'Tire ou selecione uma foto antes de salvar.');
+    return;
+  }
+
+  // 2. Valida se a imagem é reconhecida como mercadoria
+  if (estadoIa.ehMercadoria === false && !estadoIa.forcado) {
+    somBeepErro();
+    setStatus('erro', 'A foto atual NÃO é uma mercadoria válida. Troque a foto ou confirme a liberação.');
+    return;
+  }
+
+  // 3. Valida nome do produto
+  if (!produto || produto.length < 2) {
+    setStatus('erro', 'Informe um nome de mercadoria válido (ex.: Café Torrado 500g).');
+    $('produto').focus();
+    return;
+  }
+
+  // Validação adicional contra digitação sem sentido
+  if (/^[^a-zA-Z0-9]+$/.test(produto) || /^(.)\1{3,}$/.test(produto)) {
+    setStatus('erro', 'O nome do produto informado parece inválido. Digite um produto real.');
+    $('produto').focus();
+    return;
+  }
+
+  novoId = Date.now();
+  const iaTag = estadoIa.tipo === 'encarte' ? 'Encarte verificado' : (estadoIa.ehMercadoria ? 'Mercadoria confirmada' : 'Item especial');
+  ofertas.unshift({
+    id: novoId,
+    cat: catForm,
+    foto,
+    produto,
+    preco: $('preco').value.trim(),
+    mercado: $('mercado').value.trim(),
+    ean: eanAtual,
+    iaTag
+  });
+
+  somBeepSucesso();
+  cat = 'todos'; busca = ''; $('busca').value = '';
+  limparCaptura();
+  renderCats();
+  render();
+  setStatus('ok', 'Oferta cadastrada e validada com sucesso!');
+};
+
+$('lista').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  novoId = null; ofertas = ofertas.filter((o) => String(o.id) !== b.dataset.id); render();
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if ($('cam').classList.contains('on')) $('fechaCam').click();
+  else if ($('permScrim').classList.contains('on')) $('permNao').click();
+  else if ($('scrim').classList.contains('on')) $('optCancel').click();
+  else if ($('formScrim').classList.contains('on')) $('descartar').click();
+});
+
+renderCats();
+render();
+iniciarIa();
+</script>
+</body>
+</html>
