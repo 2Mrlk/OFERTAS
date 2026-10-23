@@ -12,6 +12,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1"></script>
 
+<!-- Supabase: persistência na nuvem (Storage + Database) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <style>
 :root{
   --r:#ea1d2c; --rl:#ffeaec; --bg:#ffffff; --sf:#f5f5f5; --card:#ffffff; --ink:#3e3e3e; --mute:#717171; --line:#ebebeb;
@@ -479,14 +482,124 @@ function svgPet() {
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(s);
 }
 
-let ofertas = [
-  { id: 1, cat: 'mercearia', foto: img('#ffe2b8', '#ffc27a', '🍚'), produto: 'Arroz tipo 1, 5 kg', preco: '24,90', mercado: 'Mercado Central', iaTag: 'Mercadoria confirmada', ean: '7891000100103' },
-  { id: 2, cat: 'bebidas', foto: img('#d4ecfb', '#9fd3f2', '🥛'), produto: 'Leite integral, caixa 1 L', preco: '4,79', mercado: 'Atacado Ponte', iaTag: 'Mercadoria confirmada', ean: '7891000200204' },
-  { id: 3, cat: 'bebidas', foto: img('#ead7c6', '#c9a589', '☕'), produto: 'Café torrado, 500 g', preco: '18,50', mercado: 'Super Bom Preço', iaTag: 'Mercadoria confirmada', ean: '7891000300305' },
-  { id: 4, cat: 'padaria', foto: img('#fdeab2', '#f6cf68', '🍞'), produto: 'Pão de forma tradicional', preco: '7,90', mercado: 'Padaria Real', iaTag: 'Mercadoria confirmada', ean: '7891000400406' },
-  { id: 5, cat: 'hortifruti', foto: img('#ffd5d0', '#ff9d94', '🍅'), produto: 'Tomate italiano, kg', preco: '6,99', mercado: 'Hortifruti Sol', iaTag: 'Mercadoria confirmada', ean: '7891000500507' },
-  { id: 6, cat: 'limpeza', foto: img('#d9e8ff', '#a9c8ff', '🧴'), produto: 'Detergente neutro 500 ml', preco: '2,49', mercado: 'Atacado Ponte', iaTag: 'Mercadoria confirmada', ean: '7891000600608' },
-];
+let ofertas = [];
+
+/* ── Supabase ── */
+const SUPA_URL    = 'https://vbzumvqyexzurfludlxl.supabase.co';
+const SUPA_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZienVtdnF5ZXh6dXJmbHVkbHhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3Njk5NjYsImV4cCI6MjEwODM0NTk2Nn0.Sq-dcG1FaHnCOP9nLTu2SHxnclTts6AwkuxLIqLO5C8';
+const BUCKET      = 'fotos-ofertas';
+const EXTENSOES   = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const supa        = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// Converte data URI (utf8 ou base64) em Blob sem usar fetch
+function dataUriParaBlob(uri) {
+  const [cab, corpo] = uri.split(',');
+  const mime = cab.split(':')[1].split(';')[0];
+  if (cab.includes(';base64')) {
+    const bin = atob(corpo);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return new Blob([buf], { type: mime });
+  }
+  return new Blob([decodeURIComponent(corpo)], { type: mime });
+}
+
+// SVG → PNG via Canvas (imagens demo)
+function svgParaPng(svgBlob) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = 800; c.height = 800;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 800, 800);
+        ctx.drawImage(img, 0, 0, 800, 800);
+        c.toBlob((p) => p ? res(p) : rej(new Error('Falha PNG')), 'image/png');
+      };
+      img.onerror = () => rej(new Error('Falha img'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => rej(new Error('Falha reader'));
+    reader.readAsDataURL(svgBlob);
+  });
+}
+
+// Qualquer URI → Blob
+async function uriParaBlob(uri) {
+  let blob;
+  if (uri.startsWith('data:')) {
+    blob = dataUriParaBlob(uri);
+  } else {
+    const r = await fetch(uri);
+    if (!r.ok) throw new Error('Fetch ' + r.status);
+    blob = await r.blob();
+  }
+  if (!blob.type || blob.type === 'application/octet-stream') blob = new Blob([blob], { type: 'image/jpeg' });
+  if (blob.type === 'image/svg+xml') blob = await svgParaPng(blob);
+  if (!EXTENSOES[blob.type]) throw new Error('Formato não suportado: ' + blob.type);
+  return blob;
+}
+
+// Linha do banco → objeto local
+function deLinha(l) {
+  return {
+    id:      l.id,
+    cat:     'mercearia',       // campo não existe no banco; padrão para compatibilidade
+    foto:    l.foto_url || 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#f3f4f6"/><text x="100" y="110" font-size="60" text-anchor="middle">📦</text></svg>'),
+    produto: l.produto || '(sem nome)',
+    preco:   l.preco != null ? String(l.preco).replace('.', ',') : '',
+    mercado: l.mercado || '',
+    ean:     l.ean || '',
+    iaTag:   l.ia_tag || '',
+    fotoPath: l.foto_path || null,
+  };
+}
+
+// Carrega ofertas do Supabase ao iniciar
+async function carregarOfertas() {
+  try {
+    const { data, error } = await supa.from('ofertas').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    ofertas = (data || []).map(deLinha);
+    renderCats(); render();
+  } catch (e) {
+    console.warn('[Supabase] Erro ao carregar:', e.message);
+    renderCats(); render();
+  }
+}
+
+// Salva foto no Storage e oferta no banco
+async function salvarNaNuvem({ fotoUri, produto, preco, mercado, ean, iaTag, cat }) {
+  const blob    = await uriParaBlob(fotoUri);
+  const ext     = EXTENSOES[blob.type];
+  const caminho = `ofertas/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+
+  const { error: erroUp } = await supa.storage.from(BUCKET).upload(caminho, blob, { contentType: blob.type, cacheControl: '3600', upsert: false });
+  if (erroUp) throw erroUp;
+
+  const { data: pub } = supa.storage.from(BUCKET).getPublicUrl(caminho);
+
+  const { data, error } = await supa.from('ofertas').insert({
+    produto, preco: preco ? parseFloat(String(preco).replace(/\./g, '').replace(',', '.')) : null,
+    mercado: mercado || null, ean, ia_tag: iaTag,
+    foto_path: caminho, foto_url: pub.publicUrl,
+  }).select().single();
+
+  if (error) {
+    await supa.storage.from(BUCKET).remove([caminho]);
+    throw error;
+  }
+  return deLinha(data);
+}
+
+// Remove do banco e do bucket
+async function removerDaNuvem(oferta) {
+  const { error } = await supa.from('ofertas').delete().eq('id', oferta.id);
+  if (error) throw error;
+  if (oferta.fotoPath) await supa.storage.from(BUCKET).remove([oferta.fotoPath]);
+}
 
 function setStatus(tipo, texto) {
   const s = $('snack');
@@ -1033,7 +1146,7 @@ $('shutter').onclick = () => {
 $('descartar').onclick = () => { limparCaptura(); setStatus('aviso', 'Foto descartada.'); };
 
 /* Salvar oferta com validação de mercadoria */
-$('salvar').onclick = () => {
+$('salvar').onclick = async () => {
   const produto = $('produto').value.trim();
 
   // 1. Valida se há foto
@@ -1056,37 +1169,60 @@ $('salvar').onclick = () => {
     return;
   }
 
-  // Validação adicional contra digitação sem sentido
   if (/^[^a-zA-Z0-9]+$/.test(produto) || /^(.)\1{3,}$/.test(produto)) {
     setStatus('erro', 'O nome do produto informado parece inválido. Digite um produto real.');
     $('produto').focus();
     return;
   }
 
-  novoId = Date.now();
-  const iaTag = estadoIa.tipo === 'encarte' ? 'Encarte verificado' : (estadoIa.ehMercadoria ? 'Mercadoria confirmada' : 'Item especial');
-  ofertas.unshift({
-    id: novoId,
-    cat: catForm,
-    foto,
-    produto,
-    preco: $('preco').value.trim(),
-    mercado: $('mercado').value.trim(),
-    ean: eanAtual,
-    iaTag
-  });
+  const iaTag  = estadoIa.tipo === 'encarte' ? 'Encarte verificado' : (estadoIa.ehMercadoria ? 'Mercadoria confirmada' : 'Item especial');
+  const precoV = $('preco').value.trim();
+  const mercV  = $('mercado').value.trim();
 
-  somBeepSucesso();
-  cat = 'todos'; busca = ''; $('busca').value = '';
-  limparCaptura();
-  renderCats();
-  render();
-  setStatus('ok', 'Oferta cadastrada e validada com sucesso!');
+  // Desabilita botão durante o envio
+  const btn = $('salvar');
+  btn.disabled = true;
+  btn.textContent = 'Enviando para a nuvem…';
+  setStatus('ok', 'Enviando foto e dados para a nuvem…');
+
+  try {
+    const nova = await salvarNaNuvem({ fotoUri: foto, produto, preco: precoV, mercado: mercV, ean: eanAtual, iaTag, cat: catForm });
+    novoId = nova.id;
+    ofertas.unshift(nova);
+    somBeepSucesso();
+    cat = 'todos'; busca = ''; $('busca').value = '';
+    limparCaptura();
+    renderCats(); render();
+    setStatus('ok', 'Oferta salva na nuvem com foto e código EAN! ☁️');
+  } catch (e) {
+    console.error('[Salvar]', e);
+    somBeepErro();
+    setStatus('erro', 'Falha ao salvar na nuvem: ' + (e.message || 'erro desconhecido'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Salvar oferta';
+  }
 };
 
-$('lista').onclick = (e) => {
+$('lista').onclick = async (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  novoId = null; ofertas = ofertas.filter((o) => String(o.id) !== b.dataset.id); render();
+  const id = b.dataset.id;
+  const oferta = ofertas.find((o) => String(o.id) === id);
+  if (!oferta) return;
+  b.disabled = true;
+  b.textContent = '…';
+  try {
+    await removerDaNuvem(oferta);
+    novoId = null;
+    ofertas = ofertas.filter((o) => String(o.id) !== id);
+    render();
+    setStatus('ok', 'Oferta removida.');
+  } catch (e) {
+    console.error('[Remover]', e);
+    setStatus('erro', 'Erro ao remover: ' + e.message);
+    b.disabled = false;
+    b.textContent = 'Remover';
+  }
 };
 
 document.addEventListener('keydown', (e) => {
@@ -1100,6 +1236,7 @@ document.addEventListener('keydown', (e) => {
 renderCats();
 render();
 iniciarIa();
+carregarOfertas();
 </script>
 </body>
 </html>

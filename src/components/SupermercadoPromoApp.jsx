@@ -1,6 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { supabaseConfigurado } from '../services/supabase';
+
+// Detecta se está rodando no browser (sem Capacitor nativo)
+const IS_WEB = !window.Capacitor?.isNativePlatform?.();
 import { listarOfertas, salvarOfertaComFoto, removerOfertaComFoto } from '../services/ofertas';
 
 /**
@@ -89,6 +92,10 @@ export default function SupermercadoPromoApp() {
   const [ofertas, setOfertas] = useState([]);
   const [listando, setListando] = useState(supabaseConfigurado);
   const [salvando, setSalvando] = useState(false);
+  const [webcamAtiva, setWebcamAtiva] = useState(false);
+  const inputFileRef = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   // Carrega as ofertas salvas no Supabase ao abrir o app
   useEffect(() => {
@@ -215,9 +222,15 @@ export default function SupermercadoPromoApp() {
   };
 
   const capturarEncarte = async () => {
-    setCarregando(true);
     setStatus({ tipo: '', texto: '' });
 
+    // No browser usa <input type="file"> — Capacitor Camera não funciona fora do Android/iOS
+    if (IS_WEB) {
+      inputFileRef.current?.click();
+      return;
+    }
+
+    setCarregando(true);
     try {
       const permitido = await garantirPermissoes();
       if (!permitido) {
@@ -247,6 +260,63 @@ export default function SupermercadoPromoApp() {
     } finally {
       setCarregando(false);
     }
+  };
+
+  // Handler do <input type="file"> (fallback web)
+  const onFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Usa o blob: URL — o fetch em uriParaBlob vai ler antes do upload
+    // Não revogamos aqui pois o URI ainda será usado para exibir a preview e fazer upload
+    const objectUrl = URL.createObjectURL(file);
+    setFotoUri(objectUrl);
+    setEan(gerarEan13());
+    analisarMercadoria(objectUrl, null);
+    // Limpa o input para permitir selecionar o mesmo arquivo novamente
+    e.target.value = '';
+  };
+
+  // Abre a webcam
+  const abrirWebcam = async () => {
+    setStatus({ tipo: '', texto: '' });
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      streamRef.current = stream;
+      setWebcamAtiva(true);
+      // Precisa aguardar o elemento <video> ser montado
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      }, 100);
+    } catch (err) {
+      setStatus({ tipo: 'erro', texto: 'Não foi possível acessar a webcam: ' + err.message });
+    }
+  };
+
+  // Captura o frame atual da webcam como PNG
+  const capturarFrameWebcam = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      const objectUrl = URL.createObjectURL(blob);
+      fecharWebcam();
+      setFotoUri(objectUrl);
+      setEan(gerarEan13());
+      analisarMercadoria(objectUrl, null);
+    }, 'image/png');
+  };
+
+  // Para o stream e fecha a webcam
+  const fecharWebcam = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setWebcamAtiva(false);
   };
 
   const carregarDemo = (tipo) => {
@@ -320,6 +390,8 @@ export default function SupermercadoPromoApp() {
       });
       tocarBeep(true);
       setOfertas((lista) => [nova, ...lista]);
+      // Revoga o blob: URL se foi criado pelo input file (evita vazamento de memória)
+      if (fotoUri?.startsWith('blob:')) URL.revokeObjectURL(fotoUri);
       setFotoUri(null);
       setForm({ produto: '', preco: '', mercado: '' });
       setAnaliseIa({ analisando: false, eMercadoria: null, tipo: '', titulo: '', detalhe: '', confianca: 0, sugestaoNome: '', forcado: false });
@@ -376,22 +448,96 @@ export default function SupermercadoPromoApp() {
         {/* Captura / pré-visualização */}
         <section className="rounded-2xl border-2 border-stone-900 bg-white p-4 shadow-[4px_4px_0_#1c1917]">
           <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-stone-300 bg-stone-100">
-            {fotoUri ? (
+            {/* View da webcam */}
+            {webcamAtiva && (
+              <div className="absolute inset-0 z-10 flex flex-col bg-black">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="h-full w-full object-cover"
+                />
+                {/* Mira laser */}
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-48 w-48 rounded-xl border-2 border-red-500 opacity-80 shadow-[0_0_12px_2px_rgba(239,68,68,0.6)]" />
+                  <div className="absolute h-px w-48 bg-red-500 opacity-70 shadow-[0_0_8px_2px_rgba(239,68,68,0.8)]"
+                    style={{ animation: 'scan 1.8s ease-in-out infinite' }} />
+                </div>
+                {/* Botões da webcam */}
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-3 px-4">
+                  <button
+                    type="button"
+                    onClick={capturarFrameWebcam}
+                    className="flex-1 rounded-xl bg-white py-3 text-sm font-black text-stone-900 shadow-lg active:bg-stone-100"
+                  >
+                    📸 Capturar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fecharWebcam}
+                    className="rounded-xl bg-stone-800 px-4 py-3 text-sm font-bold text-white active:bg-stone-900"
+                  >
+                    ✕ Fechar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!webcamAtiva && (fotoUri ? (
               <img src={fotoUri} alt="Encarte capturado" className="h-full w-full object-cover" />
             ) : (
               <p className="px-6 text-center text-sm font-medium text-stone-500">
                 Nenhum encarte fotografado. Use os botões abaixo para fotografar ou testar o reconhecimento.
               </p>
-            )}
+            ))}
           </div>
 
-          <button
-            onClick={capturarEncarte}
-            disabled={carregando}
-            className="mt-4 w-full rounded-xl bg-stone-900 py-3.5 text-sm font-bold text-white active:bg-stone-700 disabled:opacity-50"
-          >
-            {carregando ? 'Abrindo câmera com scanner...' : fotoUri ? 'Trocar foto' : 'Tirar Foto / Galeria'}
-          </button>
+          {/* Animação do scanner laser */}
+          <style>{`
+            @keyframes scan {
+              0%   { transform: translateY(-80px); opacity: 0.9; }
+              50%  { transform: translateY(0px);   opacity: 1;   }
+              100% { transform: translateY(80px);  opacity: 0.9; }
+            }
+          `}</style>
+
+          {/* Input file oculto */}
+          <input
+            ref={inputFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={onFileSelected}
+          />
+
+          {/* Botões de captura — dois no browser, Capacitor no nativo */}
+          {IS_WEB ? (
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => inputFileRef.current?.click()}
+                className="rounded-xl bg-stone-900 py-3.5 text-sm font-bold text-white active:bg-stone-700"
+              >
+                🖼️ {fotoUri ? 'Trocar arquivo' : 'Procurar arquivo'}
+              </button>
+              <button
+                type="button"
+                onClick={webcamAtiva ? fecharWebcam : abrirWebcam}
+                className={`rounded-xl py-3.5 text-sm font-bold text-white active:opacity-80 ${webcamAtiva ? 'bg-red-600' : 'bg-red-500'}`}
+              >
+                {webcamAtiva ? '✕ Fechar câmera' : '📷 Abrir webcam'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={capturarEncarte}
+              disabled={carregando}
+              className="mt-4 w-full rounded-xl bg-stone-900 py-3.5 text-sm font-bold text-white active:bg-stone-700 disabled:opacity-50"
+            >
+              {carregando ? 'Abrindo câmera com scanner...' : fotoUri ? 'Trocar foto' : 'Tirar Foto / Galeria'}
+            </button>
+          )}
 
           {/* Testes Rápidos Didáticos para Validação da IA */}
           <div className="mt-4 border-t border-dashed border-stone-200 pt-3">
@@ -591,6 +737,7 @@ export default function SupermercadoPromoApp() {
                   </button>
                   <button
                     onClick={() => {
+                      if (fotoUri?.startsWith('blob:')) URL.revokeObjectURL(fotoUri);
                       setFotoUri(null);
                       setAnaliseIa({ analisando: false, eMercadoria: null, tipo: '', titulo: '', detalhe: '', confianca: 0, sugestaoNome: '', forcado: false });
                       setStatus({ tipo: 'aviso', texto: 'Foto descartada.' });

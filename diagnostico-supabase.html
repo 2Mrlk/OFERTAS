@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Diagnóstico Supabase</title>
+  <style>
+    body { font-family: monospace; background: #0f0f0f; color: #e0e0e0; padding: 20px; max-width: 800px; margin: 0 auto; }
+    h1 { color: #3ecf8e; }
+    .ok    { color: #3ecf8e; }
+    .erro  { color: #ff4d4d; }
+    .aviso { color: #f5a623; }
+    .info  { color: #7eb3ff; }
+    pre { background: #1a1a1a; border: 1px solid #333; padding: 12px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+    button { background: #3ecf8e; color: #000; border: none; padding: 10px 22px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; margin: 6px 4px; }
+    button:hover { background: #2db97d; }
+    .section { margin: 20px 0; border: 1px solid #333; border-radius: 8px; padding: 16px; }
+    .section h2 { margin-top: 0; font-size: 15px; color: #aaa; }
+    input { background: #1a1a1a; border: 1px solid #444; color: #e0e0e0; padding: 8px 12px; border-radius: 6px; font-size: 13px; font-family: monospace; }
+    input:focus { outline: 2px solid #3ecf8e; }
+    label { font-size: 12px; color: #aaa; display: block; margin-bottom: 4px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<h1>🔍 Diagnóstico Supabase — Monitor de Ofertas</h1>
+<p class="aviso">Abra o <strong>Console do DevTools (F12)</strong> para ver os logs detalhados.</p>
+
+<div class="section">
+  <h2>⚙️ Credenciais (edite se necessário)</h2>
+  <label>SUPABASE_URL</label>
+  <input id="url" type="text" style="width:100%" value="https://vbzumvqyexzurfludlxl.supabase.co" />
+  <label>SUPABASE_ANON_KEY</label>
+  <input id="key" type="text" style="width:100%" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZienVtdnF5ZXh6dXJmbHVkbHhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI3Njk5NjYsImV4cCI6MjEwODM0NTk2Nn0.Sq-dcG1FaHnCOP9nLTu2SHxnclTts6AwkuxLIqLO5C8" />
+</div>
+
+<div class="section">
+  <h2>🧪 Testes</h2>
+  <button onclick="testarPing()">1. Ping REST API</button>
+  <button onclick="testarTabela()">2. Listar tabela ofertas</button>
+  <button onclick="testarBucket()">3. Listar bucket fotos-ofertas</button>
+  <button onclick="testarUpload()">4. Upload de teste (PNG 1x1)</button>
+  <button onclick="rodarTodos()">▶ Rodar todos</button>
+  <hr style="border-color:#333;margin:10px 0"/>
+  <button onclick="criarBucket()" style="background:#f5a623;color:#000">🪣 CRIAR bucket fotos-ofertas</button>
+  <button onclick="deletarRegistrosInvalidos()" style="background:#ff4d4d;color:#fff">🗑 Limpar registros sem foto</button>
+</div>
+
+<div class="section">
+  <h2>📋 Resultado</h2>
+  <pre id="log">Clique em um botão para iniciar o diagnóstico...\n</pre>
+</div>
+
+<script>
+  const logEl = document.getElementById('log');
+
+  function log(msg, tipo = 'info') {
+    const cores = { ok: '#3ecf8e', erro: '#ff4d4d', aviso: '#f5a623', info: '#7eb3ff', branco: '#e0e0e0' };
+    const cor = cores[tipo] || cores.branco;
+    logEl.innerHTML += `<span style="color:${cor}">${escapeHtml(msg)}</span>\n`;
+    console.log(`[${tipo.toUpperCase()}]`, msg);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function separador(titulo) {
+    log(`\n${'─'.repeat(50)}`, 'branco');
+    log(`  ${titulo}`, 'branco');
+    log(`${'─'.repeat(50)}`, 'branco');
+  }
+
+  function getCredenciais() {
+    return {
+      url: document.getElementById('url').value.trim().replace(/\/$/, ''),
+      key: document.getElementById('key').value.trim(),
+    };
+  }
+
+  // ── 1. Ping ──────────────────────────────────────────────
+  async function testarPing() {
+    separador('1. PING — Supabase REST API');
+    const { url, key } = getCredenciais();
+    const endpoint = `${url}/rest/v1/`;
+    log(`GET ${endpoint}`, 'info');
+    try {
+      const r = await fetch(endpoint, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` }
+      });
+      log(`Status HTTP: ${r.status} ${r.statusText}`, r.ok ? 'ok' : 'erro');
+      const body = await r.text();
+      log(`Resposta: ${body.slice(0, 200)}`, r.ok ? 'ok' : 'erro');
+      if (r.status === 200 || r.status === 404) {
+        log('✅ Projeto Supabase está online e acessível.', 'ok');
+      } else if (r.status === 401) {
+        log('❌ Chave anon inválida ou expirada.', 'erro');
+      } else if (r.status === 503) {
+        log('❌ Projeto Supabase pausado (plan free inativo por 1 semana). Acesse app.supabase.com e reative.', 'erro');
+      }
+    } catch(e) {
+      log(`❌ Falha de rede: ${e.message}`, 'erro');
+      log('→ Possíveis causas: sem internet, URL errada, ou CORS bloqueado.', 'aviso');
+    }
+  }
+
+  // ── 2. Tabela ─────────────────────────────────────────────
+  async function testarTabela() {
+    separador('2. TABELA — SELECT em public.ofertas');
+    const { url, key } = getCredenciais();
+    const endpoint = `${url}/rest/v1/ofertas?select=id,produto,created_at&order=created_at.desc&limit=5`;
+    log(`GET ${endpoint}`, 'info');
+    try {
+      const r = await fetch(endpoint, {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        }
+      });
+      log(`Status HTTP: ${r.status}`, r.ok ? 'ok' : 'erro');
+      const body = await r.text();
+      log(`Resposta: ${body.slice(0, 500)}`, 'branco');
+
+      if (r.status === 200) {
+        const rows = JSON.parse(body);
+        if (rows.length === 0) {
+          log('⚠️  Tabela existe mas está VAZIA — nenhum produto cadastrado ainda.', 'aviso');
+        } else {
+          log(`✅ Tabela OK. ${rows.length} registro(s) encontrado(s):`, 'ok');
+          rows.forEach(r => log(`  → id=${r.id} | ${r.produto} | ${r.created_at}`, 'ok'));
+        }
+      } else if (r.status === 404 || body.includes('does not exist')) {
+        log('❌ Tabela "ofertas" NÃO EXISTE. Execute o schema.sql no SQL Editor do Supabase.', 'erro');
+      } else if (r.status === 401) {
+        log('❌ Sem permissão. Verifique as políticas RLS da tabela (seção 4 do schema.sql).', 'erro');
+      }
+    } catch(e) {
+      log(`❌ Erro: ${e.message}`, 'erro');
+    }
+  }
+
+  // ── 3. Bucket ─────────────────────────────────────────────
+  async function testarBucket() {
+    separador('3. STORAGE — Bucket fotos-ofertas');
+    const { url, key } = getCredenciais();
+    const endpoint = `${url}/storage/v1/bucket/fotos-ofertas`;
+    log(`GET ${endpoint}`, 'info');
+    try {
+      const r = await fetch(endpoint, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` }
+      });
+      log(`Status HTTP: ${r.status}`, r.ok ? 'ok' : 'erro');
+      const body = await r.text();
+      log(`Resposta: ${body.slice(0, 400)}`, 'branco');
+
+      if (r.status === 200) {
+        const bucket = JSON.parse(body);
+        log(`✅ Bucket existe. public=${bucket.public}, size_limit=${bucket.file_size_limit}`, 'ok');
+        if (!bucket.public) {
+          log('⚠️  Bucket NÃO é público! As URLs geradas não funcionarão.', 'aviso');
+        }
+      } else if (r.status === 404) {
+        log('❌ Bucket "fotos-ofertas" NÃO EXISTE. Execute o schema.sql no SQL Editor.', 'erro');
+      } else if (r.status === 400) {
+        log('❌ Bucket não encontrado ou nome errado.', 'erro');
+      }
+    } catch(e) {
+      log(`❌ Erro: ${e.message}`, 'erro');
+    }
+  }
+
+  // ── 4. Upload ─────────────────────────────────────────────
+  async function testarUpload() {
+    separador('4. UPLOAD — PNG 1x1 pixel de teste');
+    const { url, key } = getCredenciais();
+
+    // PNG 1x1 pixel transparente (mínimo válido)
+    const PNG1x1_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const binario = atob(PNG1x1_BASE64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/png' });
+
+    const caminho = `ofertas/teste-diagnostico-${Date.now()}.png`;
+    const endpoint = `${url}/storage/v1/object/fotos-ofertas/${caminho}`;
+    log(`POST ${endpoint}`, 'info');
+    log(`Blob: ${blob.type}, ${blob.size} bytes`, 'info');
+
+    try {
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'image/png',
+          'Cache-Control': '3600',
+          'x-upsert': 'false',
+        },
+        body: blob,
+      });
+      log(`Status HTTP: ${r.status}`, r.ok ? 'ok' : 'erro');
+      const body = await r.text();
+      log(`Resposta: ${body.slice(0, 400)}`, 'branco');
+
+      if (r.status === 200) {
+        const pub = `${url}/storage/v1/object/public/fotos-ofertas/${caminho}`;
+        log(`✅ Upload bem-sucedido!`, 'ok');
+        log(`URL pública: ${pub}`, 'ok');
+        // Limpar arquivo de teste
+        setTimeout(async () => {
+          await fetch(`${url}/storage/v1/object/fotos-ofertas/${caminho}`, {
+            method: 'DELETE',
+            headers: { apikey: key, Authorization: `Bearer ${key}` }
+          });
+          log('🗑️  Arquivo de teste removido.', 'aviso');
+        }, 2000);
+      } else if (r.status === 400 && body.includes('Bucket not found')) {
+        log('❌ Bucket "fotos-ofertas" não existe. Execute o schema.sql.', 'erro');
+      } else if (r.status === 403) {
+        log('❌ Sem permissão de INSERT no Storage. Verifique as políticas RLS (seção 5 do schema.sql).', 'erro');
+      } else if (r.status === 404) {
+        log('❌ Endpoint de Storage não encontrado. URL pode estar errada.', 'erro');
+      }
+    } catch(e) {
+      log(`❌ Erro de rede: ${e.message}`, 'erro');
+    }
+  }
+
+  async function rodarTodos() {
+    logEl.innerHTML = '';
+    await testarPing();
+    await testarTabela();
+    await testarBucket();
+    await testarUpload();
+    separador('DIAGNÓSTICO CONCLUÍDO');
+  }
+
+  // ── CRIAR BUCKET ──────────────────────────────────────────
+  async function criarBucket() {
+    separador('CRIAR BUCKET fotos-ofertas');
+    const { url, key } = getCredenciais();
+    const endpoint = `${url}/storage/v1/bucket`;
+    log(`POST ${endpoint}`, 'info');
+
+    try {
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: 'fotos-ofertas',
+          name: 'fotos-ofertas',
+          public: true,
+          file_size_limit: 5242880,
+          allowed_mime_types: ['image/jpeg', 'image/png', 'image/webp'],
+        }),
+      });
+      const body = await r.text();
+      log(`Status HTTP: ${r.status}`, r.ok ? 'ok' : 'erro');
+      log(`Resposta: ${body}`, 'branco');
+
+      if (r.status === 200) {
+        log('✅ Bucket "fotos-ofertas" criado com sucesso!', 'ok');
+        log('→ Rode o diagnóstico completo novamente para confirmar.', 'aviso');
+      } else if (r.status === 409 || body.includes('already exists')) {
+        log('⚠️  Bucket já existe.', 'aviso');
+      } else if (r.status === 401 || r.status === 403) {
+        log('❌ Sem permissão para criar bucket com a chave anon.', 'erro');
+        log('→ Crie manualmente: app.supabase.com → Storage → New bucket → fotos-ofertas (Public ON)', 'aviso');
+      } else {
+        log('❌ Falha ao criar bucket. Crie manualmente pelo painel do Supabase.', 'erro');
+      }
+    } catch(e) {
+      log(`❌ Erro: ${e.message}`, 'erro');
+    }
+  }
+
+  // ── DELETAR REGISTROS SEM FOTO ────────────────────────────
+  async function deletarRegistrosInvalidos() {
+    separador('LIMPAR registros sem foto_url');
+    const { url, key } = getCredenciais();
+    // DELETE WHERE foto_url IS NULL via PostgREST
+    const endpoint = `${url}/rest/v1/ofertas?foto_url=is.null`;
+    log(`DELETE ${endpoint}`, 'info');
+
+    try {
+      const r = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+      });
+      const body = await r.text();
+      log(`Status HTTP: ${r.status}`, r.ok ? 'ok' : 'erro');
+      log(`Resposta: ${body || '(vazio — nenhum registro deletado)'}`, 'branco');
+
+      if (r.ok) {
+        const rows = body ? JSON.parse(body) : [];
+        if (rows.length === 0) {
+          log('ℹ️  Nenhum registro inválido encontrado.', 'aviso');
+        } else {
+          log(`✅ ${rows.length} registro(s) inválido(s) removido(s).`, 'ok');
+        }
+      } else {
+        log('❌ Falha ao deletar. Verifique as políticas RLS da tabela.', 'erro');
+      }
+    } catch(e) {
+      log(`❌ Erro: ${e.message}`, 'erro');
+    }
+  }
+</script>
+</body>
+</html>
