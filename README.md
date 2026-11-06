@@ -1,69 +1,56 @@
-# 🛒 Monitor de Ofertas - Supermercado Promoções
+# 🏦 PoupaMais Finanças - Banco Digital & Notificações Nativas
 
-> Projeto desenvolvido para a disciplina de **Programação para Dispositivos Móveis II**.
+> Aplicativo móvel desenvolvido para a disciplina de **Programação para Dispositivos Móveis II**.
 
-Aplicativo inteligente para monitoramento, captura e comparação de preços de mercadorias e encartes de supermercados concorrentes.
+Aplicativo moderno de gestão financeira, simulação bancária e notificações nativas em tempo real no Android via **@capacitor/local-notifications**.
 
 ---
 
 ## 🚀 Funcionalidades
 
-### 🤖 Reconhecimento Inteligente de Mercadoria (IA)
-* **Visão Computacional em Tempo Real:** Utiliza TensorFlow.js e MobileNet para analisar as fotos tiradas pela câmera ou enviadas pela galeria.
-* **Validação Comercial:**
-  * ✅ **Mercadoria Válida:** Identifica alimentos, bebidas, hortifruti, padaria, produtos de limpeza e embalagens. Sugere automaticamente o nome e a categoria do produto.
-  * 📰 **Encartes Promocionais:** Reconhece folhetos, tabloides e cardápios de ofertas de supermercado.
-  * ⛔ **Rejeição de Não-Mercadorias:** Bloqueia automaticamente fotos que retratam pessoas, rostos/selfies, animais de estimação (cães/gatos), veículos ou móveis domésticos.
-* **Validação Textual:** Impede o cadastro de nomes vazios ou caracteres aleatórios repetitivos.
+### 🔔 Notificações Locais e Alertas Nativos (@capacitor/local-notifications)
+* **Permissão Nativa no Android 13+:** Verificação e solicitação do canal de permissões de notificação do sistema operacional.
+* **Disparo Imediato:** Simulação de recebimento instantâneo de Pix com notificação em tempo real na barra de status do celular (ID 269).
+* **Alertas Temporizados / Agendados:**
+  * ⏱️ **5s (ID 271):** Lembrete de vencimento de fatura do cartão.
+  * ⏱️ **10s (ID 270):** Notificação comemorativa de meta financeira poupada (R$ 500 guardados).
+  * ⏱️ **15s (ID 272):** Alerta de proteção e monitoramento de segurança da conta.
+* **Desafio Extra - Gerenciamento de Pendentes:**
+  * Consulta em tempo real das notificações na fila do sistema via `LocalNotifications.getPending()`.
+  * Cancelamento individual por ID ou cancelamento em lote de todos os alertas ativos.
 
-### 🔊 Efeitos Sonoros Nativos (Web Audio API)
-* **Bip de Sucesso:** Toca o clássico som agudo de leitor de código de barras de caixa de supermercado ao reconhecer uma mercadoria.
-* **Bip de Erro:** Emite um aviso grave duplo quando a foto não é de uma mercadoria válida.
-
-### 🔴 Mira Ótica com Laser na Câmera
-* Animação contínua de escaneamento a laser na câmera ao vivo para facilitar o enquadramento de mercadorias e encartes.
-
-### 🏷️ Código de Barras Comercial (EAN-13)
-* Geração e vinculação automática de código de barras EAN-13 brasileiro padrão (prefixo `789` e dígito verificador) para cada item cadastrado.
-* Pesquisa de produtos por nome, supermercado ou código EAN.
-
-### 💰 Comparador de Preços em Tempo Real
-* Análise instantânea enquanto o usuário digita o preço:
-  * 🟢 **Menor preço da cidade** (calcula a economia em relação ao concorrente).
-  * 🟡 **Preço dentro da média**.
-  * 🔴 **Preço acima da média**.
+### 💰 Gestão Financeira & Banco Digital
+* **Saldo Interativo & Extrato:** Consulta com botão de visualização/ocultação de saldo e atualização automática após recebimentos.
+* **Caixinhas PoupaMais:** Metas financeiras com rendimento diário de 105% do CDI e barras de progresso visuais.
+* **Feedback Sonoro (Web Audio API):** Síntese nativa de efeito sonoro de Pix e alertas bancários.
 
 ---
 
-## ☁️ Persistência na Nuvem (Supabase)
+## 🛠️ Tecnologias Utilizadas
 
-* **Storage:** a foto capturada pelo `@capacitor/camera` (URI/webPath) é convertida em `Blob` e enviada ao bucket público `fotos-ofertas` com `supabase.storage.from().upload()`.
-* **Database:** os dados da oferta (produto, preço, mercado, EAN, tag da IA e a URL pública da foto) ficam na tabela `public.ofertas`.
-* Ao remover uma oferta, o registro **e** o arquivo no bucket são apagados.
-
-### Configuração
-1. No painel do Supabase, abra **SQL Editor** e execute `supabase/schema.sql` (cria tabela, view, bucket e políticas RLS).
-2. Copie `.env.example` para `.env` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (Project Settings → API).
-3. Para o APK no GitHub Actions, cadastre os mesmos dois valores em **Settings → Secrets and variables → Actions**.
-
-> ⚠️ As políticas RLS liberam o papel `anon` (o app não tem login). Ao adicionar Supabase Auth, troque para `authenticated`.
+* **React 18** + **Vite 5**
+* **Tailwind CSS** (Tema Dark Fintech Nubank/Revolut)
+* **Capacitor 8** + **@capacitor/local-notifications** + **@capacitor/android**
+* **Google Fonts (Plus Jakarta Sans)**
 
 ---
 
-## 📂 Arquivos do Projeto
+## 📱 Como Executar
 
-* **`Monitor de Ofertas.html`**: Protótipo interativo completo (sem nuvem) que roda direto no navegador.
-* **`src/components/SupermercadoPromoApp.jsx`**: Componente React com `@capacitor/camera` + Supabase.
-* **`src/services/supabase.js`** e **`src/services/ofertas.js`**: cliente Supabase, conversão da foto para Blob, upload, listagem e remoção.
-* **`supabase/schema.sql`**: SQL do banco e do Storage.
-
----
-
-## 🧪 Como Executar
-
+### Desenvolvimento Web:
 ```bash
 npm install
-cp .env.example .env   # preencha as chaves do Supabase
-npm run dev            # navegador
-npm run build && npx cap sync android   # Android
+npm run dev
+```
+
+### Build & Sincronização Android:
+```bash
+npm run build
+npx cap sync android
+```
+
+### Compilar APK Debug:
+```bash
+cd android
+./gradlew assembleDebug
 ```

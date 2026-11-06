@@ -1,9 +1,9 @@
 {
-  "name": "monitor-de-ofertas",
+  "name": "poupamais-financas",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Monitor de Ofertas com IA para reconhecimento de mercadorias",
+  "description": "PoupaMais - App de Gestão Financeira com Notificações Nativas e Alertas",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -11,10 +11,9 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
-    "@capacitor/camera": "^8.2.0",
+    "@capacitor/local-notifications": "^8.3.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@supabase/supabase-js": "^2.45.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
@@ -26,7 +25,7 @@
     "autoprefixer": "^10.4.20"
   },
   "main": "postcss.config.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "keywords": ["financas", "poupamais", "local-notifications", "capacitor", "react"],
+  "author": "2Mrlk",
+  "license": "MIT"
 }

@@ -1,5 +1,6 @@
-import SupermercadoPromoApp from './components/SupermercadoPromoApp';
+import React from 'react';
+import PoupaMaisApp from './components/PoupaMaisApp';
 
 export default function App() {
-  return <SupermercadoPromoApp />;
+  return <PoupaMaisApp />;
 }

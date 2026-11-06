@@ -29,9 +29,6 @@ jobs:
 
       - name: Compilar Frontend
         run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Sincronizar Capacitor
         run: npx cap sync android
@@ -45,5 +42,5 @@ jobs:
       - name: Publicar APK para Download
         uses: actions/upload-artifact@v4
         with:
-          name: monitor-de-ofertas-apk
+          name: poupamais-financas-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
